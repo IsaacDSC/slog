@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>slog — visualizador de logs</title>
+  <style>
+    :root {
+      --bg: #0d1117; --panel: #161b22; --panel-2: #1c2330; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --accent-weak: #1f6feb33;
+      --row-hover: #1c2230; --code: #0b0f14;
+      --lvl-error: #f85149; --lvl-warn: #d29922; --lvl-info: #3fb950; --lvl-debug: #8b949e;
+      --shadow: 0 1px 3px rgba(0,0,0,.4);
+    }
+    [data-theme="light"] {
+      --bg: #f6f8fa; --panel: #ffffff; --panel-2: #f0f3f6; --border: #d0d7de;
+      --text: #1f2328; --muted: #656d76; --accent: #0969da; --accent-weak: #0969da1a;
+      --row-hover: #f0f3f6; --code: #f6f8fa;
+      --lvl-error: #cf222e; --lvl-warn: #9a6700; --lvl-info: #1a7f37; --lvl-debug: #656d76;
+      --shadow: 0 1px 3px rgba(140,149,159,.25);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+    header {
+      display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+      background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+    }
+    header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+    header h1 .dot { color: var(--accent); }
+    .grow { flex: 1; }
+    .pill {
+      font-size: 12px; color: var(--muted); background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px;
+    }
+    .pill b { color: var(--text); }
+    button, select, input, textarea {
+      font-family: inherit; font-size: 13px; color: var(--text);
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.primary:hover { filter: brightness(1.1); }
+    .tabs { display: flex; gap: 4px; padding: 10px 20px 0; }
+    .tabs button { background: transparent; border: 1px solid transparent; border-bottom: none;
+      border-radius: 6px 6px 0 0; color: var(--muted); }
+    .tabs button.active { background: var(--panel); border-color: var(--border); color: var(--text); }
+    main { padding: 0 20px 40px; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 0 8px 8px 8px;
+    }
+    .toolbar input[type=text] { min-width: 220px; flex: 1; }
+    .checkbox { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+      color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    tbody td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tbody tr:hover { background: var(--row-hover); }
+    .col-time { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .col-msg { width: 99%; }
+    .lvl { font-weight: 600; font-size: 11px; letter-spacing: .4px; padding: 2px 8px; border-radius: 4px;
+      display: inline-block; min-width: 50px; text-align: center; }
+    .lvl-ERROR { color: var(--lvl-error); background: color-mix(in srgb, var(--lvl-error) 15%, transparent); }
+    .lvl-WARN  { color: var(--lvl-warn);  background: color-mix(in srgb, var(--lvl-warn) 15%, transparent); }
+    .lvl-INFO  { color: var(--lvl-info);  background: color-mix(in srgb, var(--lvl-info) 15%, transparent); }
+    .lvl-DEBUG { color: var(--lvl-debug); background: color-mix(in srgb, var(--lvl-debug) 15%, transparent); }
+    .attrs { margin-top: 4px; }
+    .attrs code, .raw code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+      color: var(--muted); background: var(--code); padding: 2px 6px; border-radius: 4px;
+      display: inline-block; max-width: 100%; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+    }
+    .empty { text-align: center; color: var(--muted); padding: 40px; }
+    .sql-area { padding: 14px; }
+    .sql-area textarea {
+      width: 100%; min-height: 90px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      resize: vertical; line-height: 1.5;
+    }
+    .sql-actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+    .sql-hint { color: var(--muted); font-size: 12px; }
+    .error { color: var(--lvl-error); padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 13px; }
+    .result-meta { color: var(--muted); font-size: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+    .scroll-x { overflow-x: auto; }
+    .log-scroll { max-height: calc(100vh - 220px); overflow: auto; }
+    .log-scroll thead th { position: sticky; top: 0; z-index: 1; }
+    .hidden { display: none; }
+    .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .examples code { cursor: pointer; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 8px; font-family: ui-monospace, monospace; }
+    .examples code:hover { border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span class="dot">●</span> slog</h1>
+    <span class="pill">total <b id="stat-total">0</b></span>
+    <span class="pill" id="stat-poll">polling…</span>
+    <span class="grow"></span>
+    <button id="btn-pause" title="Pausar/retomar o polling">⏸ Pausar</button>
+    <button id="btn-theme" title="Alternar tema">🌙 Tema</button>
+  </header>
+
+  <div class="tabs">
+    <button data-tab="logs" class="active">Logs</button>
+    <button data-tab="sql">Console SQL</button>
+  </div>
+
+  <main>
+    <!-- ABA LOGS -->
+    <section id="tab-logs">
+      <div class="toolbar">
+        <input type="text" id="f-text" placeholder="buscar em msg / raw…">
+        <select id="f-level"><option value="">todos os níveis</option></select>
+        <select id="f-limit">
+          <option value="100">100 linhas</option>
+          <option value="200" selected>200 linhas</option>
+          <option value="500">500 linhas</option>
+          <option value="1000">1000 linhas</option>
+        </select>
+        <label class="checkbox"><input type="checkbox" id="f-live" checked> ao vivo</label>
+        <button id="btn-clear">Limpar filtros</button>
+      </div>
+      <div class="panel">
+        <div class="scroll-x log-scroll">
+          <table>
+            <thead>
+              <tr><th class="col-time">horário</th><th>nível</th><th class="col-msg">mensagem</th></tr>
+            </thead>
+            <tbody id="logs-body"></tbody>
+          </table>
+        </div>
+        <div id="logs-empty" class="empty">sem logs ainda…</div>
+      </div>
+    </section>
+
+    <!-- ABA SQL -->
+    <section id="tab-sql" class="hidden">
+      <div class="panel" style="border-radius: 0 8px 8px 8px; border-top: 1px solid var(--border);">
+        <div class="sql-area">
+          <textarea id="sql-input" spellcheck="false">SELECT level, COUNT(*) AS total FROM logs GROUP BY level ORDER BY total DESC;</textarea>
+          <div class="sql-actions">
+            <button class="primary" id="btn-run">▶ Executar (Ctrl+Enter)</button>
+            <span class="sql-hint">somente leitura — SELECT / WITH / PRAGMA / EXPLAIN</span>
+          </div>
+          <div class="examples" id="sql-examples">
+            <code>SELECT * FROM logs ORDER BY id DESC LIMIT 50;</code>
+            <code>SELECT level, COUNT(*) AS total FROM logs GROUP BY level;</code>
+            <code>SELECT * FROM logs WHERE level = 'ERROR' ORDER BY id DESC;</code>
+            <code>SELECT * FROM logs WHERE msg LIKE '%timeout%';</code>
+          </div>
+        </div>
+        <div id="sql-output"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Templates Handlebars -->
+  <script id="tpl-logs" type="text/x-handlebars-template">
+    {{#each rows}}
+    <tr>
+      <td class="col-time">{{displayTime this}}</td>
+      <td><span class="lvl lvl-{{level}}">{{#if level}}{{level}}{{else}}—{{/if}}</span></td>
+      <td class="col-msg">
+        <div>{{#if msg}}{{msg}}{{else}}{{raw}}{{/if}}</div>
+        {{#if attrs}}<div class="attrs"><code>{{attrs}}</code></div>{{/if}}
+      </td>
+    </tr>
+    {{/each}}
+  </script>
+
+  <script id="tpl-result" type="text/x-handlebars-template">
+    <div class="result-meta">{{rowCount}} linha(s)</div>
+    <div class="scroll-x">
+      <table>
+        <thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>
+        <tbody>
+          {{#each rows}}
+          <tr>{{#each this}}<td><code style="background:transparent;padding:0;color:inherit">{{this}}</code></td>{{/each}}</tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+  </script>
+
+  <script src="/assets/handlebars.min.js"></script>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

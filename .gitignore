@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Banco de logs gerado em runtime pelo slog
+*.db
+*.db-wal
+*.db-shm
