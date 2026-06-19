@@ -23,8 +23,36 @@ meu-app | ./slog -echo | grep ERROR
 | `-batch` | `100`      | Registros por gravação em lote                     |
 | `-flush` | `1s`       | Tempo máximo antes de gravar um lote parcial       |
 | `-echo`  | `false`    | Repassa cada linha para o stdout (passthrough)     |
+| `-web`   | `:8080`    | Endereço da interface web (use `-web ""` para desligar) |
 
 Encerra de forma limpa em `Ctrl+C` / `SIGTERM`, gravando o lote pendente.
+
+## Interface web
+
+Junto com a ingestão, o `slog` sobe uma interface web (por padrão em
+`http://localhost:8080`) para visualizar e consultar os logs em tempo real:
+
+```sh
+meu-app | ./slog -db logs.db          # UI em http://localhost:8080
+meu-app | ./slog -db logs.db -web :9000   # outra porta
+meu-app | ./slog -db logs.db -web ""      # sem interface web
+```
+
+Recursos:
+
+- **Logs ao vivo** — a lista atualiza sozinha via *polling* incremental.
+- **Filtros** — busca por texto (em `msg`/`raw`), por nível e limite de linhas.
+- **Console SQL** — consultas arbitrárias de **somente leitura**
+  (`SELECT` / `WITH` / `PRAGMA` / `EXPLAIN`); comandos de escrita são recusados.
+- **Tema claro/escuro**, com a preferência salva no navegador.
+
+A interface permanece no ar **após o EOF** do `stdin` (quando o processo de
+origem termina), para você continuar inspecionando os logs — encerre com
+`Ctrl+C`. Os assets (incluindo o Handlebars) são embutidos no binário, então
+funciona offline, sem CDN.
+
+> A UI dá acesso de leitura ao banco a quem alcançar a porta. Como é uma
+> ferramenta de uso local, não há autenticação; evite expô-la na rede.
 
 ## Schema
 
