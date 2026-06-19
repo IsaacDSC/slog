@@ -38,6 +38,10 @@ meu-app | ./slog -db logs.db -web :9000   # outra porta
 meu-app | ./slog -db logs.db -web ""      # sem interface web
 ```
 
+![Aba de logs ao vivo com filtros](docs/page1.png)
+
+![Console SQL com consulta sobre os logs](docs/page2.png)
+
 Recursos:
 
 - **Logs ao vivo** — a lista atualiza sozinha via *polling* incremental.
