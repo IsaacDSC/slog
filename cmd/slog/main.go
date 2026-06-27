@@ -11,15 +11,23 @@
 // Para também repassar as linhas adiante no pipe, use -echo:
 //
 //	meu-app | slog -echo | grep ERROR
+//
+// Subcomandos:
+//
+//	slog db:clear            remove os arquivos .db (e -wal/-shm) do diretório atual
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +37,16 @@ import (
 )
 
 func main() {
+	// Despacha subcomandos no estilo "db:clear" antes do parsing de flags do
+	// modo de ingest. Um subcomando é o primeiro argumento e contém ':'.
+	if len(os.Args) > 1 && strings.Contains(os.Args[1], ":") {
+		if err := runSubcommand(os.Args[1], os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "slog: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	dbPath := flag.String("db", "logs.db", "caminho do arquivo SQLite")
 	batch := flag.Int("batch", 100, "quantidade de registros por gravação em lote")
 	flush := flag.Duration("flush", time.Second, "intervalo máximo para gravar um lote parcial")
@@ -40,6 +58,74 @@ func main() {
 		fmt.Fprintf(os.Stderr, "slog: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// runSubcommand encaminha subcomandos no formato "namespace:ação".
+func runSubcommand(name string, args []string) error {
+	switch name {
+	case "db:clear":
+		return dbClear(args)
+	default:
+		return fmt.Errorf("subcomando desconhecido: %q", name)
+	}
+}
+
+// dbClear remove os arquivos SQLite (.db) e seus arquivos auxiliares (-wal/-shm)
+// de um diretório. Por padrão pede confirmação antes de apagar.
+func dbClear(args []string) error {
+	fs := flag.NewFlagSet("db:clear", flag.ExitOnError)
+	dir := fs.String("dir", ".", "diretório onde procurar os arquivos .db")
+	force := fs.Bool("f", false, "apaga sem pedir confirmação")
+	fs.Parse(args)
+
+	dbs, err := filepath.Glob(filepath.Join(*dir, "*.db"))
+	if err != nil {
+		return fmt.Errorf("procurando arquivos .db: %w", err)
+	}
+	sort.Strings(dbs)
+
+	// Reúne cada .db com seus arquivos auxiliares do WAL, se existirem.
+	var targets []string
+	for _, db := range dbs {
+		targets = append(targets, db)
+		for _, suffix := range []string{"-wal", "-shm"} {
+			side := db + suffix
+			if _, err := os.Stat(side); err == nil {
+				targets = append(targets, side)
+			}
+		}
+	}
+
+	if len(targets) == 0 {
+		fmt.Fprintf(os.Stderr, "slog: nenhum arquivo .db encontrado em %s\n", *dir)
+		return nil
+	}
+
+	fmt.Fprintln(os.Stderr, "slog: os seguintes arquivos serão removidos:")
+	for _, t := range targets {
+		fmt.Fprintf(os.Stderr, "  %s\n", t)
+	}
+
+	if !*force {
+		fmt.Fprint(os.Stderr, "confirma a remoção? [y/N] ")
+		resp, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		switch strings.ToLower(strings.TrimSpace(resp)) {
+		case "y", "yes", "s", "sim":
+		default:
+			fmt.Fprintln(os.Stderr, "slog: cancelado")
+			return nil
+		}
+	}
+
+	var removed int
+	for _, t := range targets {
+		if err := os.Remove(t); err != nil {
+			return fmt.Errorf("removendo %s: %w", t, err)
+		}
+		removed++
+	}
+	fmt.Fprintf(os.Stderr, "slog: %d arquivo(s) removido(s)\n", removed)
+	return nil
 }
 
 func run(dbPath string, batch int, flush time.Duration, echo bool, webAddr string) error {
@@ -73,7 +159,7 @@ func run(dbPath string, batch int, flush time.Duration, echo bool, webAddr strin
 		}()
 	}
 
-	opts := ingest.Options{BatchSize: batch, FlushInterval: flush}
+	opts := ingest.Options{BatchSize: batch, FlushInterval: flush, Done: quit}
 	if echo {
 		opts.Echo = os.Stdout
 	}

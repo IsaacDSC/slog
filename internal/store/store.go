@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS logs (
 	msg         TEXT,
 	attrs       TEXT,
 	raw         TEXT NOT NULL,
-	ingested_at TEXT NOT NULL
+	ingested_at TEXT NOT NULL,
+	created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_logs_time  ON logs(time);
 CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level);
@@ -65,8 +66,13 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("criando schema: %w", err)
 	}
 
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrando schema: %w", err)
+	}
+
 	stmt, err := db.Prepare(
-		`INSERT INTO logs (time, level, msg, attrs, raw, ingested_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO logs (time, level, msg, attrs, raw, ingested_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		db.Close()
@@ -74,6 +80,51 @@ func Open(path string) (*Store, error) {
 	}
 
 	return &Store{db: db, stmt: stmt}, nil
+}
+
+// migrate aplica alterações de schema em bancos criados por versões anteriores.
+// É idempotente: pode rodar a cada Open sem efeitos colaterais.
+func migrate(db *sql.DB) error {
+	// Verifica se a coluna created_at já existe.
+	rows, err := db.Query(`PRAGMA table_info(logs)`)
+	if err != nil {
+		return fmt.Errorf("lendo colunas: %w", err)
+	}
+	hasCreatedAt := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("lendo coluna: %w", err)
+		}
+		if name == "created_at" {
+			hasCreatedAt = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	if !hasCreatedAt {
+		// ADD COLUMN no SQLite só aceita DEFAULT constante, por isso usamos ''
+		// e em seguida preenchemos os registros antigos a partir de ingested_at.
+		if _, err := db.Exec(`ALTER TABLE logs ADD COLUMN created_at TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("adicionando coluna created_at: %w", err)
+		}
+		if _, err := db.Exec(`UPDATE logs SET created_at = ingested_at WHERE created_at = ''`); err != nil {
+			return fmt.Errorf("preenchendo created_at: %w", err)
+		}
+	}
+
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)`); err != nil {
+		return fmt.Errorf("criando índice created_at: %w", err)
+	}
+	return nil
 }
 
 // SaveBatch grava todas as entradas em uma única transação.
@@ -91,7 +142,7 @@ func (s *Store) SaveBatch(entries []Entry) error {
 	stmt := tx.Stmt(s.stmt)
 	for _, e := range entries {
 		if _, err := stmt.Exec(
-			nullable(e.Time), nullable(e.Level), nullable(e.Msg), nullable(e.Attrs), e.Raw, now,
+			nullable(e.Time), nullable(e.Level), nullable(e.Msg), nullable(e.Attrs), e.Raw, now, now,
 		); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("inserindo log: %w", err)
@@ -113,6 +164,7 @@ type LogRow struct {
 	Attrs      string `json:"attrs"`
 	Raw        string `json:"raw"`
 	IngestedAt string `json:"ingested_at"`
+	CreatedAt  string `json:"created_at"`
 }
 
 // LogFilter descreve os critérios de busca usados pela interface web.
@@ -152,7 +204,7 @@ func (s *Store) FilterLogs(f LogFilter) ([]LogRow, error) {
 		args = append(args, f.SinceID)
 	}
 
-	query := "SELECT id, time, level, msg, attrs, raw, ingested_at FROM logs"
+	query := "SELECT id, time, level, msg, attrs, raw, ingested_at, created_at FROM logs"
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -176,7 +228,7 @@ func (s *Store) FilterLogs(f LogFilter) ([]LogRow, error) {
 	for rows.Next() {
 		var r LogRow
 		var t, level, msg, attrs sql.NullString
-		if err := rows.Scan(&r.ID, &t, &level, &msg, &attrs, &r.Raw, &r.IngestedAt); err != nil {
+		if err := rows.Scan(&r.ID, &t, &level, &msg, &attrs, &r.Raw, &r.IngestedAt, &r.CreatedAt); err != nil {
 			return nil, fmt.Errorf("lendo log: %w", err)
 		}
 		r.Time, r.Level, r.Msg, r.Attrs = t.String, level.String, msg.String, attrs.String

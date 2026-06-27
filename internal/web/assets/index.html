@@ -96,6 +96,55 @@
     .examples code { cursor: pointer; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border);
       border-radius: 6px; padding: 4px 8px; font-family: ui-monospace, monospace; }
     .examples code:hover { border-color: var(--accent); }
+
+    /* Linhas clicáveis */
+    tbody tr.clickable { cursor: pointer; }
+
+    /* ===================== MODAL ===================== */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(1,4,9,.65);
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; z-index: 100; backdrop-filter: blur(2px);
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 16px 48px rgba(0,0,0,.55); width: min(900px, 100%); max-height: 86vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .modal-header {
+      display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+      border-bottom: 1px solid var(--border); background: var(--panel);
+    }
+    .modal-header .lvl { flex: none; }
+    .modal-header .modal-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }
+    .modal-header .modal-id { color: var(--muted); font-size: 12px; }
+    .modal-close {
+      margin-left: auto; background: transparent; border: none; color: var(--muted);
+      font-size: 20px; line-height: 1; padding: 4px 8px; border-radius: 6px;
+    }
+    .modal-close:hover { color: var(--text); background: var(--panel-2); border-color: transparent; }
+    .modal-body { padding: 18px; overflow: auto; }
+    .modal-field { margin-bottom: 18px; }
+    .modal-field:last-child { margin-bottom: 0; }
+    .modal-field-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+    .modal-field-label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+    .modal-field .msg-text { font-size: 14px; color: var(--text); word-break: break-word; }
+    .btn-copy {
+      margin-left: auto; font-size: 11px; padding: 3px 9px; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+    }
+    .btn-copy:hover { border-color: var(--accent); color: var(--text); }
+    .json-view {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.6;
+      background: var(--code); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+      overflow-x: auto; white-space: pre; margin: 0; color: var(--text);
+    }
+    .json-key     { color: var(--accent); }
+    .json-string  { color: var(--lvl-info); }
+    .json-number  { color: var(--lvl-warn); }
+    .json-boolean { color: var(--lvl-error); }
+    .json-null    { color: var(--muted); }
   </style>
 </head>
 <body>
@@ -165,7 +214,7 @@
   <!-- Templates Handlebars -->
   <script id="tpl-logs" type="text/x-handlebars-template">
     {{#each rows}}
-    <tr>
+    <tr class="clickable" data-id="{{id}}">
       <td class="col-time">{{displayTime this}}</td>
       <td><span class="lvl lvl-{{level}}">{{#if level}}{{level}}{{else}}—{{/if}}</span></td>
       <td class="col-msg">
@@ -183,12 +232,25 @@
         <thead><tr>{{#each columns}}<th>{{this}}</th>{{/each}}</tr></thead>
         <tbody>
           {{#each rows}}
-          <tr>{{#each this}}<td><code style="background:transparent;padding:0;color:inherit">{{this}}</code></td>{{/each}}</tr>
+          <tr class="clickable" data-ri="{{@index}}">{{#each this}}<td><code style="background:transparent;padding:0;color:inherit">{{this}}</code></td>{{/each}}</tr>
           {{/each}}
         </tbody>
       </table>
     </div>
   </script>
+
+  <!-- MODAL de detalhes do registro -->
+  <div id="modal" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <span class="lvl" id="modal-level"></span>
+        <span class="modal-time" id="modal-time"></span>
+        <span class="modal-id" id="modal-id"></span>
+        <button class="modal-close" id="modal-close" title="Fechar (Esc)">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
 
   <script src="/assets/handlebars.min.js"></script>
   <script src="/assets/app.js"></script>

@@ -18,6 +18,10 @@ type Options struct {
 	BatchSize     int           // nº de registros antes de gravar
 	FlushInterval time.Duration // tempo máximo antes de gravar um lote parcial
 	Echo          io.Writer     // se != nil, repassa cada linha (passthrough no pipe)
+	// Done, se != nil, interrompe a ingestão quando fechado (ex.: Ctrl+C),
+	// gravando o lote pendente antes de retornar. Necessário porque fechar o
+	// stdin não destrava uma leitura bloqueada quando ele é um terminal (TTY).
+	Done <-chan struct{}
 }
 
 // Run consome r linha a linha até EOF, gravando os logs em s.
@@ -88,6 +92,11 @@ func Run(r io.Reader, s *store.Store, opts Options) (int, error) {
 			if err := flush(); err != nil {
 				return total, err
 			}
+		case <-opts.Done:
+			// Saída pedida pelo usuário (Ctrl+C). Grava o lote pendente e
+			// encerra mesmo que a leitura do stdin siga bloqueada — caso de
+			// quando o stdin é um terminal e não chega ao EOF.
+			return total, flush()
 		}
 	}
 }

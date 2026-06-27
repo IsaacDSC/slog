@@ -3,16 +3,66 @@
 Lê logs em JSON do **stdin** e os persiste em um banco **SQLite**. Pensado para
 capturar a saída estruturada de um processo via pipe Unix.
 
+## Instalação
+
+Para instalar o comando `slog` na máquina (disponível em qualquer diretório):
+
+```sh
+make install
+```
+
+Isso roda `go install ./cmd/slog`, que coloca o binário em `$(go env GOBIN)`
+(ou `$(go env GOPATH)/bin` quando `GOBIN` não está definido). Garanta que esse
+diretório esteja no seu `PATH`:
+
+```sh
+export PATH="$PATH:$(go env GOPATH)/bin"   # adicione ao seu ~/.zshrc ou ~/.bashrc
+```
+
+Depois disso, basta usar o comando direto:
+
+```sh
+meu-app | slog -db logs.db
+```
+
+Para remover: `make uninstall`.
+
+## Comandos do Makefile
+
+| Comando          | Descrição                                                   |
+|------------------|-------------------------------------------------------------|
+| `make build`     | Compila o binário em `./bin/slog`                           |
+| `make run`       | Compila e executa (use `ARGS="..."` para passar flags)      |
+| `make install`   | Instala o comando `slog` na máquina (em `$(GOBIN)`)         |
+| `make uninstall` | Remove o comando `slog` instalado                           |
+| `make test`      | Roda os testes                                              |
+| `make tidy`      | Sincroniza as dependências (`go mod tidy`)                  |
+| `make clean`     | Remove binários e bancos de logs gerados                    |
+| `make db-clear`  | Remove os arquivos `.db` do diretório atual (`ARGS="-f"` para não confirmar) |
+| `make help`      | Lista os comandos disponíveis                               |
+
+```sh
+# compila e executa passando flags
+make run ARGS="-db logs.db -web :9000"
+```
+
 ## Como usar
 
 ```sh
-go build -o slog ./cmd/slog
+make build   # gera ./bin/slog
 
 # captura os logs de um app que escreve JSON no stdout
-meu-app | ./slog -db logs.db
+meu-app | ./bin/slog -db logs.db
 
 # também repassa as linhas adiante no pipe
-meu-app | ./slog -echo | grep ERROR
+meu-app | ./bin/slog -echo | grep ERROR
+```
+
+Após `make install`, o comando fica disponível globalmente, sem o prefixo de
+caminho:
+
+```sh
+meu-app | slog -db logs.db
 ```
 
 ### Flags
@@ -26,6 +76,24 @@ meu-app | ./slog -echo | grep ERROR
 | `-web`   | `:8080`    | Endereço da interface web (use `-web ""` para desligar) |
 
 Encerra de forma limpa em `Ctrl+C` / `SIGTERM`, gravando o lote pendente.
+
+### Subcomandos
+
+```sh
+# remove os arquivos .db (e -wal/-shm) do diretório atual; pede confirmação
+slog db:clear
+
+# apaga sem confirmar
+slog db:clear -f
+
+# procura em outro diretório
+slog db:clear -dir ./dados
+```
+
+| Subcomando   | Flag    | Descrição                                          |
+|--------------|---------|----------------------------------------------------|
+| `db:clear`   | `-dir`  | Diretório onde procurar os `.db` (padrão `.`)      |
+| `db:clear`   | `-f`    | Apaga sem pedir confirmação                        |
 
 ## Interface web
 
