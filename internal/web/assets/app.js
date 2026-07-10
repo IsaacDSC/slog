@@ -83,13 +83,47 @@
     );
   }
 
+  // Percorre recursivamente um valor já parseado e tenta parsear strings que
+  // por sua vez contenham JSON (comum em campos como "data"/"response_body"
+  // que chegam com JSON serializado dentro de um campo string).
+  function deepParseJSON(value) {
+    if (typeof value === "string") {
+      var t = value.trim();
+      if (t[0] === "{" || t[0] === "[") {
+        try {
+          return deepParseJSON(JSON.parse(t));
+        } catch (e) {
+          return value;
+        }
+      }
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map(deepParseJSON);
+    }
+    if (value && typeof value === "object") {
+      var out = {};
+      for (var k in value) {
+        if (Object.prototype.hasOwnProperty.call(value, k)) {
+          out[k] = deepParseJSON(value[k]);
+        }
+      }
+      return out;
+    }
+    return value;
+  }
+
   // Tenta interpretar `str` como JSON; devolve {ok, pretty} com o JSON identado.
+  // Campos aninhados que são, na verdade, JSON serializado dentro de uma
+  // string são expandidos recursivamente em vez de exibidos como texto
+  // escapado (ex.: "data": "{\"event\":...}" vira "data": { "event": ... }).
   function tryParseJSON(str) {
     if (!str) return { ok: false };
     var t = str.trim();
     if (t[0] !== "{" && t[0] !== "[") return { ok: false };
     try {
-      return { ok: true, pretty: JSON.stringify(JSON.parse(t), null, 2) };
+      var parsed = deepParseJSON(JSON.parse(t));
+      return { ok: true, pretty: JSON.stringify(parsed, null, 2) };
     } catch (e) {
       return { ok: false };
     }
