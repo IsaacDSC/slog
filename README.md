@@ -5,14 +5,32 @@ capturar a saída estruturada de um processo via pipe Unix.
 
 ## Instalação
 
-Para instalar o comando `slog` na máquina (disponível em qualquer diretório):
+### Via `go install` (sem clonar o repositório)
+
+Baixa o pacote diretamente do GitHub e compila o binário:
 
 ```sh
+go install github.com/IsaacDSC/slog/cmd/slog@latest
+```
+
+Para fixar uma versão específica, use a tag no lugar de `@latest` (ex.:
+`@v0.1.0`). Veja as tags disponíveis em
+[github.com/IsaacDSC/slog/tags](https://github.com/IsaacDSC/slog/tags).
+
+### A partir do código-fonte (clonando o repositório)
+
+```sh
+git clone https://github.com/IsaacDSC/slog.git
+cd slog
 make install
 ```
 
-Isso roda `go install ./cmd/slog`, que coloca o binário em `$(go env GOBIN)`
-(ou `$(go env GOPATH)/bin` quando `GOBIN` não está definido). Garanta que esse
+Isso roda `go install ./cmd/slog`.
+
+### Depois de instalar
+
+Ambos os métodos colocam o binário em `$(go env GOBIN)` (ou
+`$(go env GOPATH)/bin` quando `GOBIN` não está definido). Garanta que esse
 diretório esteja no seu `PATH`:
 
 ```sh
@@ -25,7 +43,7 @@ Depois disso, basta usar o comando direto:
 meu-app | slog -db logs.db
 ```
 
-Para remover: `make uninstall`.
+Para remover (quando instalado via `make install`): `make uninstall`.
 
 ## Comandos do Makefile
 

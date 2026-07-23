@@ -31,8 +31,9 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Binário compilado em ./bin pelo `make build`
+# Binário compilado em ./bin pelo `make build` (ou na raiz por `go build`)
 /bin/
+/slog
 
 # Banco de logs gerado em runtime pelo slog
 *.db
